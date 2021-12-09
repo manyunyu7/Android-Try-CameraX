@@ -6,10 +6,7 @@ import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Toast
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.Preview
+import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -18,6 +15,8 @@ import com.feylabs.learn_camera_x.databinding.ActivityMainBinding
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.lifecycle.LifecycleOwner
+
 
 class MainActivity : AppCompatActivity() {
     val binding by lazy { ActivityMainBinding.inflate(layoutInflater) }
@@ -126,13 +125,44 @@ class MainActivity : AppCompatActivity() {
             imageCapture = ImageCapture.Builder()
                 .build()
 
+            binding.btnFlashlight.setOnClickListener {
+                Toast.makeText(this, "Fl", Toast.LENGTH_SHORT).show()
+                if (imageCapture?.flashMode == ImageCapture.FLASH_MODE_OFF ||
+                    imageCapture?.flashMode == ImageCapture.FLASH_MODE_AUTO
+                ) {
+                    imageCapture?.flashMode = ImageCapture.FLASH_MODE_ON
+                }
+
+                if (imageCapture?.flashMode == ImageCapture.FLASH_MODE_ON) {
+                    imageCapture?.flashMode = ImageCapture.FLASH_MODE_OFF
+                }
+
+            }
+
+
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             try {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
+
+                val cam: Camera = cameraProvider.bindToLifecycle(
                     this, cameraSelector, previewView, imageCapture
                 )
+
+                binding.btnFlashlight.setOnClickListener {
+                    if (cam.getCameraInfo().hasFlashUnit()) {
+
+                        when(cam.cameraInfo.torchState.value){
+                            TorchState.ON->{
+                                cam.getCameraControl().enableTorch(false) // or false
+                            }
+                            TorchState.OFF->{
+                                cam.getCameraControl().enableTorch(true) // or false
+                            }
+                        }
+
+                    }
+                }
 
             } catch (e: Exception) {
                 SnackBarHelper.showSnakbarTypeTwo(binding.root, "Camera Tidak Tersedia")
