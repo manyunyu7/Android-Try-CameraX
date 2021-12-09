@@ -1,21 +1,38 @@
 package com.feylabs.learn_camera_x
 
+import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Toast
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.feylabs.learn_camera_x.RazConst.REQUIRED_PERMISSIONS
 import com.feylabs.learn_camera_x.databinding.ActivityMainBinding
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : AppCompatActivity() {
     val binding by lazy { ActivityMainBinding.inflate(layoutInflater) }
+
+    private var imageCapture: ImageCapture? = null
+    private lateinit var outputDirectory: File
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
 
+        outputDirectory = getOutputDirectory()
+
         if (allPermissionGranted()) {
+            startCamera()
             Toast.makeText(this, "We Have Permission", Toast.LENGTH_SHORT).show()
         } else {
             ActivityCompat.requestPermissions(
@@ -23,6 +40,56 @@ class MainActivity : AppCompatActivity() {
                 RazConst.REQUEST_CODE_PERMISSION
             )
         }
+
+        binding.btnTakePhoto.setOnClickListener {
+            SnackBarHelper.showSnakbarTypeTwo(
+                binding.root,
+                "Take Photo"
+            )
+            takePhoto()
+        }
+
+    }
+
+    private fun getOutputDirectory(): File {
+        val mediaDir = externalMediaDirs.firstOrNull()?.let { mFile ->
+            File(mFile, resources.getString(R.string.app_name)).apply {
+                mkdirs()
+            }
+        }
+
+        return if (mediaDir != null && mediaDir.exists())
+            mediaDir else filesDir
+    }
+
+    private fun takePhoto() {
+        val imageCapture = imageCapture ?: return
+
+        val photoFile = File(
+            outputDirectory,
+            SimpleDateFormat(
+                RazConst.FILE_NAME_FORMAT,
+                Locale.getDefault()
+            ).format(System.currentTimeMillis()) + ".jpg"
+        )
+
+        val outputOption = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+        imageCapture.takePicture(
+            outputOption,
+            ContextCompat.getMainExecutor(this),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(p0: ImageCapture.OutputFileResults) {
+                    val savedUri = Uri.fromFile(photoFile)
+                    val msg = "Photo Saved"
+                    SnackBarHelper.showSnakbarTypeTwo(binding.root, "$msg $savedUri")
+                }
+
+                override fun onError(p0: ImageCaptureException) {
+                    SnackBarHelper.showSnakbarTypeTwo(binding.root, p0.message)
+                }
+
+            })
     }
 
     override fun onRequestPermissionsResult(
@@ -34,15 +101,47 @@ class MainActivity : AppCompatActivity() {
 
         if (requestCode == RazConst.REQUEST_CODE_PERMISSION) {
             if (allPermissionGranted()) {
-
+                startCamera()
             } else {
-                SnackBarHelper.showSnakbarTypeOne(binding.root,"Permission Not Granted")
+                SnackBarHelper.showSnakbarTypeOne(binding.root, "Permission Not Granted")
             }
         }
     }
 
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+
+        cameraProviderFuture.addListener({
+
+            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+
+            val previewView = Preview.Builder()
+                .build()
+                .also { mPreview ->
+                    mPreview.setSurfaceProvider(
+                        binding.viewFinder.surfaceProvider
+                    )
+                }
+
+            imageCapture = ImageCapture.Builder()
+                .build()
+
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    this, cameraSelector, previewView, imageCapture
+                )
+
+            } catch (e: Exception) {
+                SnackBarHelper.showSnakbarTypeTwo(binding.root, "Camera Tidak Tersedia")
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
     private fun allPermissionGranted(): Boolean =
-        RazConst.REQUIRED_PERMISSIONS.all {
+        REQUIRED_PERMISSIONS.all {
             ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
         }
 
